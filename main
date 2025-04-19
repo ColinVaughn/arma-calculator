@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Grid Distance Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        canvas {
+            border: 1px solid #000;
+            cursor: crosshair;
+        }
+        #controls {
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+<h1>Grid Distance Tool</h1>
+<input type="file" id="imageUpload" accept="image/*" />
+<div id="controls">
+    <button onclick="resetCalibration()">Reset Calibration</button>
+    <button onclick="resetMeasurement()">Reset Measurement</button>
+</div>
+<canvas id="mapCanvas"></canvas>
+<p id="info">Upload an image and click top-left to top-right or top-left to bottom-right grid corners to calibrate.</p>
+
+<script>
+    const canvas = document.getElementById("mapCanvas");
+    const ctx = canvas.getContext("2d");
+    const info = document.getElementById("info");
+
+    let img = new Image();
+    let calibrationPoints = [];
+    let scale = null;
+    let measurePoints = [];
+    let imageLoaded = false;
+
+    document.getElementById("imageUpload").addEventListener("change", function(e) {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            img.onload = function() {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+                imageLoaded = true;
+            };
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(e.target.files[0]);
+    });
+
+    canvas.addEventListener("click", function(event) {
+        if (!imageLoaded) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+
+        if (scale === null) {
+            calibrationPoints.push({ x, y });
+            drawCircle(x, y, "green");
+
+            if (calibrationPoints.length === 2) {
+                const dx = calibrationPoints[1].x - calibrationPoints[0].x;
+                const dy = calibrationPoints[1].y - calibrationPoints[0].y;
+                const pixelDistance = Math.sqrt(dx * dx + dy * dy);
+                scale = 1000 / pixelDistance;
+                info.textContent = `Calibration complete. 1 pixel = ${scale.toFixed(5)} meters. Now click two points to measure.`;
+            }
+            return;
+        }
+
+        measurePoints.push({ x, y });
+        drawCircle(x, y, "red");
+
+        if (measurePoints.length === 2) {
+            const dx = measurePoints[1].x - measurePoints[0].x;
+            const dy = measurePoints[1].y - measurePoints[0].y;
+            const pixelDistance = Math.sqrt(dx * dx + dy * dy);
+            const meters = pixelDistance * scale;
+
+            drawLine(measurePoints[0], measurePoints[1]);
+            info.textContent = `Distance: ${meters.toFixed(2)} meters.`;
+        }
+    });
+
+    function drawCircle(x, y, color) {
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, 2 * Math.PI);
+        ctx.fillStyle = color;
+        ctx.fill();
+    }
+
+    function drawLine(p1, p2) {
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.strokeStyle = "blue";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+
+    function resetCalibration() {
+        if (!imageLoaded) return;
+        calibrationPoints = [];
+        scale = null;
+        resetCanvas();
+        info.textContent = "Calibration reset. Click top-left to top-right or bottom-right to calibrate 1000 meters.";
+    }
+
+    function resetMeasurement() {
+        if (!imageLoaded) return;
+        measurePoints = [];
+        resetCanvas();
+        if (scale !== null) {
+            info.textContent = "Calibration retained. Now click two points to measure.";
+        } else {
+            info.textContent = "Upload an image and calibrate first.";
+        }
+    }
+
+    function resetCanvas() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        calibrationPoints.forEach(p => drawCircle(p.x, p.y, "green"));
+    }
+</script>
+</body>
